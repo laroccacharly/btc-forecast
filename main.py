@@ -1,7 +1,7 @@
-from src.general_view import general_view
+from src.main_ui import main_ui
 
 def main(): 
-    general_view()
+    main_ui()
 
 if __name__ == "__main__": 
-    main()
+    main()  
