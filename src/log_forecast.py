@@ -13,19 +13,51 @@ def fit_prophet_model(df):
 def log_forecast(): 
     st.title('Log Forecast Model')
 
+    # Add hyperparameter inputs to the sidebar
+    st.sidebar.header("Log Model Hyperparameters")
+    # Default values based on Prophet's defaults
+    cp_prior_scale = st.sidebar.number_input(
+        'Changepoint Prior Scale (Trend Flexibility)', 
+        min_value=0.001, 
+        max_value=0.5, 
+        value=0.05, # Prophet default
+        step=0.01,
+        format="%.3f"
+    )
+    seasonality_prior_scale = st.sidebar.number_input(
+        'Seasonality Prior Scale (Seasonality Strength)', 
+        min_value=0.01, 
+        max_value=10.0, 
+        value=10.0, # Prophet default
+        step=0.1,
+        format="%.2f"
+    )
+
     df = load_data()
     df = df.copy() 
     df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
+    # Store original y before log transform for the final plot
+    df['y_orig'] = df['y']
     df['y'] = np.log(df['y']) 
-    # Fit the model
-    with st.spinner('Training the forecasting model...'):
-        model = fit_prophet_model(df)
+    
+    fit_model = st.button("Fit Model on Log Prices")
+    if not fit_model:
+        return
 
-    # Create future dates for forecasting (365 days)
-    future = model.make_future_dataframe(periods=365)
-    forecast = model.predict(future)
-    main_plot = plot_plotly(model, forecast)
-    fig_components = plot_components_plotly(model, forecast)
+    # Fit the model using selected hyperparameters
+    with st.spinner(f'Training the forecasting model with C:{cp_prior_scale}, S:{seasonality_prior_scale}...'):
+        model = Prophet(
+            changepoint_prior_scale=cp_prior_scale,
+            seasonality_prior_scale=seasonality_prior_scale
+        ).fit(df[['ds', 'y']])
+
+        future = model.make_future_dataframe(periods=365)
+        forecast = model.predict(future)
+
+
+        main_plot = plot_plotly(model, forecast)
+        fig_components = plot_components_plotly(model, forecast)
+
     st.plotly_chart(main_plot, use_container_width=True)
     st.plotly_chart(fig_components, use_container_width=True)
 
