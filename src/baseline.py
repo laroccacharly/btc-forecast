@@ -11,6 +11,10 @@ def fit_prophet_model(df):
 def baseline(): 
     st.title('Baseline Model')
 
+    fit_model = st.button("Fit Baseline Model")
+    if not fit_model:
+        return
+
     df = load_data()
     df = df.copy() 
     df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
