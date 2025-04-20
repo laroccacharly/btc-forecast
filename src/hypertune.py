@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Define the parameter grid - Based on Prophet documentation recommendations
 param_grid = {
-    'changepoint_prior_scale': [0.001, 0.01, 0.1, 0.5],
+    'changepoint_prior_scale': [0.0001, 0.001, 0.01, 0.1, 0.5],
     'seasonality_prior_scale': [0.01, 0.1, 1.0, 10.0],
 }
 
@@ -98,17 +98,13 @@ def run_hyperparameter_tuning(df_log, initial_days, period_days, horizon_days):
 def hypertune_app(): 
     st.title("Hyperparameter Tuning")
 
-    df = load_data()
-    df = df.copy()
-    df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
-    df['y_orig'] = df['y'] 
-    df['y'] = np.log(df['y'])
-    st.write("Data loaded successfully. Using log-transformed prices.")
-    df_subset = df[['ds', 'y']] # Prepare data subset for tuning function
-
-
     st.subheader("Model Hyperparameters")
-    st.json(param_grid)
+
+    st.markdown("**`changepoint_prior_scale`**: Parameter modulating the flexibility of the automatic changepoint selection. Large values will allow many changepoints, small values will allow few changepoints.")
+    st.write(f"Values tested: `{param_grid['changepoint_prior_scale']}`")
+    
+    st.markdown("**`seasonality_prior_scale`**: Parameter modulating the strength of the seasonality model. Larger values allow the model to fit larger seasonal fluctuations, smaller values dampen the seasonality.")
+    st.write(f"Values tested: `{param_grid['seasonality_prior_scale']}`")
     
     st.subheader("Cross-Validation Settings (in Days)")
     col1, col2, col3 = st.columns(3)
@@ -150,8 +146,14 @@ def hypertune_app():
     # No need for string validation anymore
     with st.spinner("Running cross-validation... Please wait."):
         # Pass the integer day values to the tuning function
-        results_df, best_params, best_rmse = run_hyperparameter_tuning(
-            df_subset, 
+        df = load_data()
+        df = df.copy()
+        df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
+        df['y_orig'] = df['y'] 
+        df['y'] = np.log(df['y'])
+        df = df[['ds', 'y']] # Prepare data subset for tuning function
+        results_display, best_params, best_rmse = run_hyperparameter_tuning(
+            df, 
             initial_days=initial_cv_days, 
             period_days=period_cv_days, 
             horizon_days=horizon_cv_days
@@ -159,11 +161,10 @@ def hypertune_app():
     
     st.subheader("Tuning Results (Sorted by RMSE)")
     
-    results_display = results_df.copy()
     if not results_display.empty and 'params' in results_display.columns and isinstance(results_display['params'].iloc[0], dict):
         params_df = results_display['params'].apply(pd.Series)
         results_display = pd.concat([params_df, results_display.drop(['params'], axis=1)], axis=1)
-            
+        
     cols_order = list(param_grid.keys()) + METRICS
     cols_order = [col for col in cols_order if col in results_display.columns] 
     results_display = results_display[cols_order]
