@@ -22,33 +22,34 @@ all_params = [dict(zip(param_grid.keys(), v)) for v in itertools.product(*param_
 # Metrics to calculate (use mean across horizon)
 METRICS = ['mse', 'rmse', 'mae', 'mape', 'mdape', 'smape', 'coverage']
 
-@st.cache_data # Cache the tuning results
-def run_hyperparameter_tuning(df_log):
-    """
-    Performs hyperparameter tuning for the Prophet model using cross-validation.
-    Calculates multiple performance metrics.
+# Explanations for metrics
+METRIC_EXPLANATIONS = {
+    'mse': "Mean Squared Error: Average of the squares of the errors. Lower is better. Sensitive to large errors.",
+    'rmse': "Root Mean Squared Error: Square root of MSE. In the same units as the target variable. Lower is better.",
+    'mae': "Mean Absolute Error: Average of the absolute errors. Less sensitive to outliers than MSE/RMSE. Lower is better.",
+    'mape': "Mean Absolute Percentage Error: Average of absolute percentage errors. Lower is better. Undefined if actual value is zero.",
+    'mdape': "Median Absolute Percentage Error: Median of absolute percentage errors. Robust to outliers. Lower is better.",
+    'smape': "Symmetric Mean Absolute Percentage Error: Percentage error based on the average of actual and forecast values. Ranges from 0% to 200%. Lower is better.",
+    'coverage': "Coverage: Proportion of actual values that fall within the predicted uncertainty interval (yhat_lower, yhat_upper). Higher is better (closer to the nominal interval width, e.g., 0.8 for 80% interval)."
+}
 
-    Args:
-        df_log (pd.DataFrame): DataFrame with 'ds' and log-transformed 'y' columns.
-
-    Returns:
-        tuple: A tuple containing:
-            - pd.DataFrame: DataFrame with parameters and their corresponding mean metrics.
-            - dict: The best parameter combination found (based on lowest mean RMSE).
-            - float: The lowest mean RMSE achieved.
-    """
+# Pass CV params (as integers representing days) to the cached function
+@st.cache_data 
+def run_hyperparameter_tuning(df_log, initial_days, period_days, horizon_days):
     results = []
     total_combinations = len(all_params)
-    # Status updates need to be handled carefully with caching and button clicks
-    # We'll display progress within the function but the final status outside
     progress_bar = st.progress(0)
     status_text = st.empty()
     status_text.text(f"Starting hyperparameter tuning for {total_combinations} combinations...") 
 
+    # Format integers into strings for Prophet
+    initial_str = f"{initial_days} days"
+    period_str = f"{period_days} days"
+    horizon_str = f"{horizon_days} days"
+
     for i, params in enumerate(all_params):
-        # Note: status_text updates here will only be visible during the cached run
         status_text.text(f"Testing combination {i+1}/{total_combinations}: {params}")
-        logging.info(f"Testing parameters: {params}")
+        logging.info(f"Testing parameters: {params} with CV params: initial={initial_str}, period={period_str}, horizon={horizon_str}")
         
         current_metrics = {'params': params}
         for metric in METRICS:
@@ -56,8 +57,8 @@ def run_hyperparameter_tuning(df_log):
 
         try:
             m = Prophet(**params).fit(df_log)
-            df_cv = cross_validation(m, initial='730 days', period='180 days', horizon='365 days', parallel="processes", disable_tqdm=True)
-            df_p = performance_metrics(df_cv, metrics=METRICS, rolling_window=0.1)
+            df_cv = cross_validation(m, initial=initial_str, period=period_str, horizon=horizon_str, parallel="processes", disable_tqdm=True)
+            df_p = performance_metrics(df_cv, metrics=METRICS, rolling_window=0.9)
 
             if not df_p.empty:
                 for metric in METRICS:
@@ -69,12 +70,11 @@ def run_hyperparameter_tuning(df_log):
             logging.info(f"Parameters: {params} - Metrics: { {k: f'{v:.4f}' if isinstance(v, float) else v for k, v in current_metrics.items() if k != 'params'} }")
 
         except Exception as e:
-            logging.error(f"Failed for parameters {params}: {e}")
+            logging.error(f"Failed for parameters {params} with CV params: {initial_str}, {period_str}, {horizon_str}: {e}")
 
         results.append(current_metrics)
         progress_bar.progress((i + 1) / total_combinations)
 
-    # Clear the progress/status text after completion
     status_text.text("Hyperparameter tuning function complete.")
     progress_bar.empty()
     
@@ -96,63 +96,91 @@ def run_hyperparameter_tuning(df_log):
     return results_df, best_params, best_rmse
 
 def hypertune_app(): 
-    st.title("Prophet Hyperparameter Tuning for BTC Log Forecast")
+    st.title("Hyperparameter Tuning")
 
-    st.write("Loading and preparing data...")
-    try:
-        df = load_data()
-        df = df.copy()
-        df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
-        df['y_orig'] = df['y'] 
-        df['y'] = np.log(df['y'])
-        st.write("Data loaded successfully. Using log-transformed prices.")
-        data_loaded = True
-        df_subset = df[['ds', 'y']] # Prepare data subset for tuning function
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        data_loaded = False
-        df_subset = None
+    df = load_data()
+    df = df.copy()
+    df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
+    df['y_orig'] = df['y'] 
+    df['y'] = np.log(df['y'])
+    st.write("Data loaded successfully. Using log-transformed prices.")
+    df_subset = df[['ds', 'y']] # Prepare data subset for tuning function
 
-    if data_loaded:
-        st.subheader("Parameter Grid")
-        st.json(param_grid)
-        
-        st.subheader("Start Cross-Validation")
-        st.info("This process computes multiple metrics (MSE, RMSE, MAE, MAPE, MDAPE, SMAPE, Coverage) across several parameter combinations and can take several minutes.")
-        
-        # Add the button
-        start_tuning = st.button("Start Hyperparameter Tuning")
 
-        # Only run tuning and display results if the button is clicked
-        if start_tuning and df_subset is not None:
-            with st.spinner("Running cross-validation... Please wait."):
-                results_df, best_params, best_rmse = run_hyperparameter_tuning(df_subset)
+    st.subheader("Model Hyperparameters")
+    st.json(param_grid)
+    
+    st.subheader("Cross-Validation Settings (in Days)")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        # Use number_input for days
+        initial_cv_days = st.number_input(
+            "Initial Training Period (Days)", 
+            min_value=1, 
+            value=4000, # Default as integer
+            max_value=4500,
+            step=10,
+            help="The amount of historical data (in days) to use for the first training cutoff."
+        )
+    with col2:
+        period_cv_days = st.number_input(
+            "Cutoff Period (Days)", 
+            min_value=1,
+            value=180, # Default as integer
+            max_value=365,
+            step=10,
+            help="The spacing (in days) between subsequent training cutoffs."
+        )
+    with col3:
+        horizon_cv_days = st.number_input(
+            "Forecast Horizon (Days)", 
+            min_value=1,
+            value=365, # Default as integer
+            max_value=365,
+            step=1,
+            help="The length of the forecast (in days) to make after each cutoff."
+        )
 
-            st.subheader("Tuning Results (Sorted by RMSE)")
+    st.subheader("Start Tuning Process")
+    st.info("This process computes multiple metrics across several parameter combinations using the specified cross-validation settings. It can take several minutes.")
+    
+    start_tuning = st.button("Start Hyperparameter Tuning")
+    if not start_tuning:
+        return 
+    # No need for string validation anymore
+    with st.spinner("Running cross-validation... Please wait."):
+        # Pass the integer day values to the tuning function
+        results_df, best_params, best_rmse = run_hyperparameter_tuning(
+            df_subset, 
+            initial_days=initial_cv_days, 
+            period_days=period_cv_days, 
+            horizon_days=horizon_cv_days
+        )
+    
+    st.subheader("Tuning Results (Sorted by RMSE)")
+    
+    results_display = results_df.copy()
+    if not results_display.empty and 'params' in results_display.columns and isinstance(results_display['params'].iloc[0], dict):
+        params_df = results_display['params'].apply(pd.Series)
+        results_display = pd.concat([params_df, results_display.drop(['params'], axis=1)], axis=1)
             
-            results_display = results_df.copy()
-            if not results_display.empty and 'params' in results_display.columns and isinstance(results_display['params'].iloc[0], dict):
-                params_df = results_display['params'].apply(pd.Series)
-                results_display = pd.concat([params_df, results_display.drop(['params'], axis=1)], axis=1)
-                 
-            cols_order = list(param_grid.keys()) + METRICS
-            cols_order = [col for col in cols_order if col in results_display.columns] 
-            if cols_order: # Only proceed if columns exist
-                results_display = results_display[cols_order]
-                
-                float_cols = results_display.select_dtypes(include=['float']).columns
-                format_dict = {col: '{:.4f}' for col in float_cols}
-                
-                st.dataframe(results_display.style.format(format_dict))
-            else:
-                 st.warning("Result columns could not be prepared for display.")   
+    cols_order = list(param_grid.keys()) + METRICS
+    cols_order = [col for col in cols_order if col in results_display.columns] 
+    results_display = results_display[cols_order]
+    
+    float_cols = results_display.select_dtypes(include=['float']).columns
+    column_config = {col: st.column_config.NumberColumn(format="%.4f") for col in float_cols}
+    for metric, explanation in METRIC_EXPLANATIONS.items():
+        if metric in column_config:
+                column_config[metric] = st.column_config.NumberColumn(format="%.4f", help=explanation)
 
-            st.subheader("Best Parameters Found (based on lowest RMSE)")
-            if best_rmse != float('inf') and best_params != "N/A":
-                st.success(f"Lowest Mean RMSE: {best_rmse:.4f}")
-                st.json(best_params)
-            else:
-                st.warning("Hyperparameter tuning failed to find optimal parameters based on RMSE.")
-        elif start_tuning and df_subset is None:
-             st.error("Data could not be prepared for tuning.")
-# Removed the if __name__ == "__main__": block 
+    st.dataframe(results_display, column_config=column_config)
+
+    st.subheader("Best Parameters Found (based on lowest RMSE)")
+    if best_rmse != float('inf') and best_params != "N/A":
+        st.success(f"Lowest Mean RMSE: {best_rmse:.4f}")
+        st.json(best_params)
+    else:
+        st.warning("Hyperparameter tuning failed to find optimal parameters based on RMSE.")
+
+
