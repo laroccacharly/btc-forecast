@@ -1,14 +1,7 @@
 import pandas as pd
 import streamlit as st
 import plotly.express as px
-
-@st.cache_data
-def load_data(): 
-    url = "https://github.com/laroccacharly/btc-price-history/raw/refs/heads/main/btc_price_history.parquet"
-    df = pd.read_parquet(url)
-    df = df.sort_values('timestamp') # Ensure data is sorted chronologically
-    return df
-
+from .data import load_data
 
 def general_view(): 
     df = load_data()

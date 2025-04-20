@@ -1,0 +1,80 @@
+import numpy as np
+import streamlit as st
+from prophet import Prophet
+from prophet.plot import plot_components_plotly, plot_plotly
+from .data import load_data
+import plotly.graph_objects as go
+
+def fit_prophet_model(df): 
+    model = Prophet(yearly_seasonality=True, weekly_seasonality=True)
+    model.fit(df)
+    return model
+
+def log_forecast(): 
+    st.title('Log Forecast Model')
+
+    df = load_data()
+    df = df.copy() 
+    df = df.rename(columns={'price': 'y', 'timestamp': 'ds'})
+    df['y'] = np.log(df['y']) 
+    # Fit the model
+    with st.spinner('Training the forecasting model...'):
+        model = fit_prophet_model(df)
+
+    # Create future dates for forecasting (365 days)
+    future = model.make_future_dataframe(periods=365)
+    forecast = model.predict(future)
+    main_plot = plot_plotly(model, forecast)
+    fig_components = plot_components_plotly(model, forecast)
+    st.plotly_chart(main_plot, use_container_width=True)
+    st.plotly_chart(fig_components, use_container_width=True)
+
+    # Transform predictions back to original scale FOR DISPLAY, not for plotting func
+    forecast = forecast.copy()
+    forecast['yhat'] = np.exp(forecast['yhat'])
+    forecast['yhat_upper'] = np.exp(forecast['yhat_upper'])
+    forecast['yhat_lower'] = np.exp(forecast['yhat_lower'])
+    df['y'] = np.exp(df['y'])
+    # Create a new plot for the original scale
+    fig_original_scale = go.Figure()
+
+    # Add actual prices (original scale)
+    fig_original_scale.add_trace(go.Scatter(
+        x=df['ds'], 
+        y=df['y'], 
+        name='Actual', 
+        mode='markers',
+        marker=dict(color='black', size=4)
+    ))
+
+    # Add forecast (original scale)
+    fig_original_scale.add_trace(go.Scatter(
+        x=forecast['ds'], 
+        y=forecast['yhat'], 
+        name='Forecast', 
+        mode='lines', 
+        line=dict(color='blue')
+    ))
+
+    # Add confidence interval (original scale)
+    fig_original_scale.add_trace(go.Scatter(
+        x=forecast['ds'],
+        y=forecast['yhat_upper'],
+        fill=None,
+        mode='lines',
+        line=dict(color='rgba(0,0,255,0.1)'),
+        name='Upper Confidence Interval',
+    ))
+    # Add lower confidence interval (original scale)
+    fig_original_scale.add_trace(go.Scatter(
+        x=forecast['ds'],
+        y=forecast['yhat_lower'],
+        fill=None, 
+        mode='lines',   
+        line=dict(color='rgba(0,0,255,0.1)'),
+        name='Lower Confidence Interval',
+    ))
+    
+    fig_original_scale.update_layout(yaxis_type="log")
+    
+    st.plotly_chart(fig_original_scale, use_container_width=True)
