@@ -11,7 +11,9 @@ def get_latest_prices_from_yahoo(start_date) -> pd.DataFrame:
     df.reset_index(drop=True, inplace=True)
     df = df[["Date", "Open"]]
     df.rename(columns={"Date": "timestamp", "Open": "price"}, inplace=True)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=False)
+    # Remove timezone information to make it timezone-naive, required for prophet
+    df["timestamp"] = df["timestamp"].dt.tz_localize(None)
     df["price"] = pd.to_numeric(df["price"], errors='coerce')
     df.sort_values(by="timestamp", inplace=True)
     return df
