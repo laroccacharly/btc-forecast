@@ -12,7 +12,7 @@ def fit_prophet_model(df):
 
 def log_forecast(): 
     st.title('Log Forecast Model')
-
+    st.info("We fit on the log of the price data, using the default parameters for the Prophet model. You can adjust the hyperparameters to see how they affect the model.")
     # Add hyperparameter inputs to the sidebar
     st.sidebar.header("Log Model Hyperparameters")
     # Default values based on Prophet's defaults
@@ -58,10 +58,12 @@ def log_forecast():
         main_plot = plot_plotly(model, forecast)
         fig_components = plot_components_plotly(model, forecast)
 
+    st.subheader('Forecast and Components Plots')
     st.plotly_chart(main_plot, use_container_width=True)
     st.plotly_chart(fig_components, use_container_width=True)
 
     # Transform predictions back to original scale FOR DISPLAY, not for plotting func
+    st.subheader('Forecast on Original Scale')
     forecast = forecast.copy()
     forecast['yhat'] = np.exp(forecast['yhat'])
     forecast['yhat_upper'] = np.exp(forecast['yhat_upper'])

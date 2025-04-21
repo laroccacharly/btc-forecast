@@ -10,7 +10,7 @@ def fit_prophet_model(df):
 
 def baseline(): 
     st.title('Baseline Model')
-
+    st.info("We fit directly on the price data, using the default parameters for the Prophet model.")
     fit_model = st.button("Fit Baseline Model")
     if not fit_model:
         return
@@ -28,5 +28,6 @@ def baseline():
     forecast = model.predict(future)
     main_plot = plot_plotly(model, forecast)
     fig_components = plot_components_plotly(model, forecast)
+    st.subheader('Forecast and Components Plots')
     st.plotly_chart(main_plot, use_container_width=True)
     st.plotly_chart(fig_components, use_container_width=True)
