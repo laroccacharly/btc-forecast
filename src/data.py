@@ -1,9 +1,23 @@
 import pandas as pd
 import streamlit as st
+from .yahoo_data import get_latest_prices_from_yahoo
 
 @st.cache_data
 def load_data(): 
+    print("Loading data...")
     url = "https://github.com/laroccacharly/btc-price-history/raw/refs/heads/main/btc_price_history.parquet"
     df = pd.read_parquet(url)
     df = df.sort_values('timestamp') # Ensure data is sorted chronologically
+    df = add_latest_prices(df)
     return df
+
+def add_latest_prices(df: pd.DataFrame) -> pd.DataFrame:
+    latest_date = df['timestamp'].max()
+    latest_date_plus_1 = latest_date + pd.Timedelta(days=1)
+    latest_prices = get_latest_prices_from_yahoo(latest_date_plus_1)
+    print(f"Number of prices added: {len(latest_prices)}")
+    df = pd.concat([df, latest_prices])
+    df.reset_index(drop=True, inplace=True)
+    return df
+
+
