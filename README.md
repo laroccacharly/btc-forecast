@@ -8,5 +8,7 @@ This repository explores the use of Facebook's Prophet time series forecasting m
 4.  ⚙️ **Tune Hyperparameters:** Perform cross-validation to find optimal Prophet hyperparameters (`changepoint_prior_scale`, `seasonality_prior_scale`) for improved forecast accuracy.
 
 
-Reference: 
-https://facebook.github.io/prophet/
+References: 
+- Prophet: https://facebook.github.io/prophet/
+- BTC price history: https://github.com/laroccacharly/btc-price-history
+- Yahoo finance: https://yfinance-python.org/
