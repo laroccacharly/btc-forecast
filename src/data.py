@@ -8,8 +8,16 @@ def load_data():
     url = "https://github.com/laroccacharly/btc-price-history/raw/refs/heads/main/btc_price_history.parquet"
     df = pd.read_parquet(url)
     df = df.sort_values('timestamp') # Ensure data is sorted chronologically
-    df = add_latest_prices(df)
+    df = try_adding_latest_prices(df)
     return df
+
+def try_adding_latest_prices(df: pd.DataFrame) -> pd.DataFrame:
+    """Yahoo Finance API is not always available, so we try to add the latest prices and if it fails, we return the original dataframe"""
+    try:
+        return add_latest_prices(df)
+    except Exception as e:
+        print(f"Error adding latest prices: {e}")
+        return df
 
 def add_latest_prices(df: pd.DataFrame) -> pd.DataFrame:
     latest_date = df['timestamp'].max()
